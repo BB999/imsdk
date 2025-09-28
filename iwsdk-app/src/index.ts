@@ -30,27 +30,27 @@ import { RobotSystem } from "./robot.js";
 
 const assets: AssetManifest = {
   chimeSound: {
-    url: "/audio/chime.mp3",
+    url: `${import.meta.env.BASE_URL}audio/chime.mp3`,
     type: AssetType.Audio,
     priority: "background",
   },
   webxr: {
-    url: "/textures/webxr.png",
+    url: `${import.meta.env.BASE_URL}textures/webxr.png`,
     type: AssetType.Texture,
     priority: "critical",
   },
   environmentDesk: {
-    url: "/gltf/environmentDesk/environmentDesk.gltf",
+    url: `${import.meta.env.BASE_URL}gltf/environmentDesk/environmentDesk.gltf`,
     type: AssetType.GLTF,
     priority: "critical",
   },
   plantSansevieria: {
-    url: "/gltf/plantSansevieria/plantSansevieria.gltf",
+    url: `${import.meta.env.BASE_URL}gltf/plantSansevieria/plantSansevieria.gltf`,
     type: AssetType.GLTF,
     priority: "critical",
   },
   robot: {
-    url: "/gltf/robot/robot.gltf",
+    url: `${import.meta.env.BASE_URL}gltf/robot/robot.gltf`,
     type: AssetType.GLTF,
     priority: "critical",
   },
@@ -107,7 +107,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
     .addComponent(Interactable)
     .addComponent(Robot)
     .addComponent(AudioSource, {
-      src: "/audio/chime.mp3",
+      src: `${import.meta.env.BASE_URL}audio/chime.mp3`,
       maxInstances: 3,
       playbackMode: PlaybackMode.FadeRestart,
     });
@@ -115,7 +115,7 @@ World.create(document.getElementById("scene-container") as HTMLDivElement, {
   const panelEntity = world
     .createTransformEntity()
     .addComponent(PanelUI, {
-      config: "/ui/welcome.json",
+      config: `${import.meta.env.BASE_URL}ui/welcome.json`,
       maxHeight: 0.8,
       maxWidth: 1.6,
     })
