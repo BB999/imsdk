@@ -26,17 +26,21 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.19.0'
           cache: 'npm'
           cache-dependency-path: 'iwsdk-app/package.json'
 
       - name: Install dependencies
         working-directory: iwsdk-app
-        run: npm ci
+        run: |
+          npm cache clean --force
+          npm ci
 
       - name: Build
         working-directory: iwsdk-app
         run: npm run build
+        env:
+          NODE_ENV: production
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
