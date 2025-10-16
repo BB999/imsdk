@@ -9,6 +9,7 @@ import { useXRStore } from "./stores/xrStore";
 import { HitTestSystem } from "./systems/HitTestSystem";
 import { InteractionSystem } from "./systems/InteractionSystem";
 import { PanelSystem } from "./systems/PanelSystem";
+import { Playground } from "./components/Playground";
 
 // アセットマニフェスト定義
 const assets: AssetManifest = {
@@ -170,6 +171,9 @@ function App() {
           height: "100%",
         }}
       />
+
+      {/* Playgroundコンポーネント（ライブコーディング用） */}
+      <Playground />
 
       {/* デバッグ情報（開発時のみ表示） */}
       {import.meta.env.DEV && world && (

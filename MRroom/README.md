@@ -59,6 +59,19 @@ MRroom/
 - **npm** or **yarn**
 - **HTTPS** (automatically handled by `vite-plugin-mkcert`)
 
+### Quick Start for Live Coding
+
+このプロジェクトは**XRセッションを維持したまま**ライブコーディングできるように設計されています。
+
+詳細は **[LIVE_CODING.md](./LIVE_CODING.md)** を参照してください。
+
+```bash
+npm run dev
+# → XRモードに入る
+# → src/components/Playground.tsx を編集
+# → 保存 → 即座に反映（セッション継続）✅
+```
+
 ### Installation
 
 ```bash
