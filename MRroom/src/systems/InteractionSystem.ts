@@ -1,18 +1,17 @@
 import {
   AudioUtils,
+  OneHandGrabbable,
   createComponent,
   createSystem,
   Pressed,
-  Grabbable,
   Vector3,
 } from "@iwsdk/core";
 import { useXRStore } from "../stores/xrStore";
 
 // インタラクション可能なオブジェクト用のコンポーネント
-export const Interactive = createComponent("Interactive", {
-  id: { type: "string" },
-  highlightColor: { type: "u32", default: 0x00ff00 },
-});
+// タグコンポーネントとして定義(データなし)
+// ハイライト色などはシステム内で管理
+export const Interactive = createComponent("Interactive");
 
 /**
  * InteractionSystem
@@ -26,10 +25,12 @@ export const Interactive = createComponent("Interactive", {
 export class InteractionSystem extends createSystem({
   interactive: { required: [Interactive] },
   clicked: { required: [Interactive, Pressed] },
-  grabbed: { required: [Interactive, Grabbable] },
+  grabbed: { required: [Interactive, OneHandGrabbable] },
 }) {
   private lookAtTarget!: Vector3;
   private originalColors: Map<number, number> = new Map();
+  private entityIds: Map<number, string> = new Map(); // entity index -> string ID
+  private highlightColors: Map<number, number> = new Map(); // entity index -> highlight color
 
   init() {
     this.lookAtTarget = new Vector3();
@@ -54,8 +55,7 @@ export class InteractionSystem extends createSystem({
    * クリック処理
    */
   private handleClick(entity: any) {
-    const interactiveData = Interactive.data.id[entity.index];
-    const id = interactiveData?.toString() || `object-${entity.index}`;
+    const id = this.entityIds.get(entity.index) || `object-${entity.index}`;
 
     console.log(`Object clicked: ${id}`);
 
@@ -77,8 +77,7 @@ export class InteractionSystem extends createSystem({
    * クリック解除処理
    */
   private handleClickRelease(entity: any) {
-    const interactiveData = Interactive.data.id[entity.index];
-    const id = interactiveData?.toString() || `object-${entity.index}`;
+    const id = this.entityIds.get(entity.index) || `object-${entity.index}`;
 
     console.log(`Object released: ${id}`);
 
@@ -93,8 +92,7 @@ export class InteractionSystem extends createSystem({
    * グラブ処理
    */
   private handleGrab(entity: any) {
-    const interactiveData = Interactive.data.id[entity.index];
-    const id = interactiveData?.toString() || `object-${entity.index}`;
+    const id = this.entityIds.get(entity.index) || `object-${entity.index}`;
 
     console.log(`Object grabbed: ${id}`);
 
@@ -126,7 +124,7 @@ export class InteractionSystem extends createSystem({
 
           // ハイライト色を適用
           const highlightColor =
-            color || Interactive.data.highlightColor[entity.index] || 0x00ff00;
+            color || this.highlightColors.get(entity.index) || 0x00ff00;
           if (child.material.color) {
             child.material.color.setHex(highlightColor);
           }
@@ -174,6 +172,27 @@ export class InteractionSystem extends createSystem({
   }
 
   /**
+   * エンティティにIDを設定
+   */
+  setEntityId(entityIndex: number, id: string) {
+    this.entityIds.set(entityIndex, id);
+  }
+
+  /**
+   * エンティティのIDを取得
+   */
+  getEntityId(entityIndex: number): string | undefined {
+    return this.entityIds.get(entityIndex);
+  }
+
+  /**
+   * エンティティのハイライトカラーを設定
+   */
+  setHighlightColor(entityIndex: number, color: number) {
+    this.highlightColors.set(entityIndex, color);
+  }
+
+  /**
    * オブジェクトのインタラクション可能状態を設定
    */
   setInteractive(entityIndex: number, interactive: boolean) {
@@ -181,14 +200,14 @@ export class InteractionSystem extends createSystem({
     if (!entity) return;
 
     if (interactive) {
-      // Grabbableコンポーネントを追加（まだなければ）
-      if (!Grabbable.has(entity)) {
-        Grabbable.add(entity);
+      // OneHandGrabbableコンポーネントを追加（まだなければ）
+      if (!entity.hasComponent(OneHandGrabbable)) {
+        entity.addComponent(OneHandGrabbable);
       }
     } else {
-      // Grabbableコンポーネントを削除
-      if (Grabbable.has(entity)) {
-        Grabbable.remove(entity);
+      // OneHandGrabbableコンポーネントを削除
+      if (entity.hasComponent(OneHandGrabbable)) {
+        entity.removeComponent(OneHandGrabbable);
       }
     }
   }

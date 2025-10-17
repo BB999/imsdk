@@ -67,11 +67,35 @@ function App() {
         camera.position.set(0, 1.6, 3);
         camera.lookAt(0, 1, 0);
 
-        // システムの登録
-        newWorld
-          .registerSystem(PanelSystem)
-          .registerSystem(HitTestSystem)
-          .registerSystem(InteractionSystem);
+        // システムの登録(問題のあるシステムを特定するため1つずつ)
+        try {
+          console.log("Registering PanelSystem...");
+          newWorld.registerSystem(PanelSystem);
+          console.log("PanelSystem registered successfully");
+        } catch (err) {
+          console.error("Failed to register PanelSystem:", err);
+        }
+
+        try {
+          console.log("Registering HitTestSystem...");
+          newWorld.registerSystem(HitTestSystem);
+          console.log("HitTestSystem registered successfully");
+        } catch (err) {
+          console.error("Failed to register HitTestSystem:", err);
+        }
+
+        try {
+          console.log("Registering InteractionSystem...");
+          newWorld.registerSystem(InteractionSystem);
+          console.log("InteractionSystem registered successfully");
+        } catch (err: any) {
+          console.error("Failed to register InteractionSystem:", err);
+          console.error("InteractionSystem error details:", {
+            message: err?.message,
+            stack: err?.stack,
+            name: err?.name,
+          });
+        }
 
         // Zustandストアに保存
         setWorld(newWorld);
@@ -81,8 +105,15 @@ function App() {
       })
       .catch((err) => {
         console.error("Failed to create World:", err);
-        useXRStore.getState().setError(err.message);
+        console.error("Error details:", {
+          message: err?.message,
+          stack: err?.stack,
+          name: err?.name,
+          fullError: JSON.stringify(err, Object.getOwnPropertyNames(err))
+        });
+        useXRStore.getState().setError(err?.message || "Unknown error occurred");
         setIsInitializing(false);
+        initOnceRef.current = false; // 再試行を可能にする
       });
 
     // クリーンアップ

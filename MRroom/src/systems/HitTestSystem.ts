@@ -8,8 +8,8 @@ import {
 } from "@iwsdk/core";
 import { useXRStore } from "../stores/xrStore";
 
-// ヒットテストレティクル用のコンポーネント
-export const HitTestReticle = createComponent("HitTestReticle", {});
+// ヒットテストレティクル用のコンポーネント(空のスキーマでもOK)
+export const HitTestReticle = createComponent("HitTestReticle");
 
 /**
  * HitTestSystem
@@ -23,19 +23,41 @@ export class HitTestSystem extends createSystem({
   private hitTestSource: XRHitTestSource | null = null;
   private reticleMesh: Mesh | null = null;
   private lastHitPosition: Vector3 = new Vector3();
+  private referenceSpace: XRReferenceSpace | null = null;
+
+  // XRセッション開始時の処理
+  private handleSessionStart = async (event: XRSessionEvent) => {
+    const session = event.session;
+    if (!session) return;
+
+    try {
+      this.referenceSpace =
+        this.renderer.xr.getReferenceSpace() ??
+        (await session.requestReferenceSpace("local-floor"));
+    } catch (error) {
+      console.error("Failed to acquire reference space:", error);
+      this.referenceSpace = null;
+    }
+
+    await this.setupHitTestSource(session);
+  };
+
+  // XRセッション終了時の処理
+  private handleSessionEnd = () => {
+    this.cleanupHitTestSource();
+    this.referenceSpace = null;
+  };
 
   init() {
     // レティクルの作成
     this.createReticle();
 
-    // XRセッション開始時にヒットテストソースを初期化
-    this.world.xrSession.subscribe((session) => {
-      if (session) {
-        this.setupHitTestSource(session);
-      } else {
-        this.cleanupHitTestSource();
-      }
-    });
+    // XRイベント購読
+    this.renderer.xr.addEventListener(
+      "sessionstart",
+      this.handleSessionStart
+    );
+    this.renderer.xr.addEventListener("sessionend", this.handleSessionEnd);
   }
 
   /**
@@ -57,7 +79,7 @@ export class HitTestSystem extends createSystem({
 
     // エンティティとして登録
     const entity = this.world.createTransformEntity(this.reticleMesh);
-    HitTestReticle.add(entity);
+    entity.addComponent(HitTestReticle);
   }
 
   /**
@@ -83,7 +105,11 @@ export class HitTestSystem extends createSystem({
    */
   private cleanupHitTestSource() {
     if (this.hitTestSource) {
-      this.hitTestSource.cancel();
+      try {
+        this.hitTestSource.cancel();
+      } catch (error) {
+        console.warn("HitTestSource cancel failed:", error);
+      }
       this.hitTestSource = null;
     }
 
@@ -103,13 +129,17 @@ export class HitTestSystem extends createSystem({
     const frame = this.world.xrFrame;
     if (!frame) return;
 
+    const referenceSpace =
+      this.referenceSpace ?? this.renderer.xr.getReferenceSpace();
+    if (!referenceSpace) return;
+
     try {
       // ヒットテスト結果を取得
       const hitTestResults = frame.getHitTestResults(this.hitTestSource);
 
       if (hitTestResults.length > 0) {
         const hit = hitTestResults[0];
-        const pose = hit.getPose(this.world.xrReferenceSpace!);
+        const pose = hit.getPose(referenceSpace);
 
         if (pose) {
           // レティクルの位置を更新
@@ -159,5 +189,14 @@ export class HitTestSystem extends createSystem({
     if (this.reticleMesh) {
       (this.reticleMesh.material as MeshBasicMaterial).color.setHex(color);
     }
+  }
+
+  destroy() {
+    this.renderer.xr.removeEventListener(
+      "sessionstart",
+      this.handleSessionStart
+    );
+    this.renderer.xr.removeEventListener("sessionend", this.handleSessionEnd);
+    this.cleanupHitTestSource();
   }
 }

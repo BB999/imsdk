@@ -6,7 +6,7 @@ import {
   MeshStandardMaterial,
   SphereGeometry,
 } from "@iwsdk/core";
-import { Interactive } from "../systems/InteractionSystem";
+import { Interactive, InteractionSystem } from "../systems/InteractionSystem";
 
 /**
  * Playground Component
@@ -43,10 +43,15 @@ export function Playground() {
     cube.position.set(-0.5, 1.5, -2);
 
     const cubeEntity = world.createTransformEntity(cube);
-    Interactive.add(cubeEntity, {
-      id: "playground-cube",
-      highlightColor: 0xff00ff,
-    });
+    cubeEntity.addComponent(Interactive);
+
+    // InteractionSystemにIDとハイライトカラーを登録
+    const interactionSystem = world.getSystem(InteractionSystem);
+    if (interactionSystem) {
+      interactionSystem.setEntityId(cubeEntity.index, "playground-cube");
+      interactionSystem.setHighlightColor(cubeEntity.index, 0xff00ff);
+    }
+
     objectsRef.current.push({ mesh: cube, entity: cubeEntity });
 
     // サンプル2: 緑の球体
@@ -60,10 +65,14 @@ export function Playground() {
     sphere.position.set(0.5, 1.5, -2);
 
     const sphereEntity = world.createTransformEntity(sphere);
-    Interactive.add(sphereEntity, {
-      id: "playground-sphere",
-      highlightColor: 0x00ffff,
-    });
+    sphereEntity.addComponent(Interactive);
+
+    // InteractionSystemにIDとハイライトカラーを登録
+    if (interactionSystem) {
+      interactionSystem.setEntityId(sphereEntity.index, "playground-sphere");
+      interactionSystem.setHighlightColor(sphereEntity.index, 0x00ffff);
+    }
+
     objectsRef.current.push({ mesh: sphere, entity: sphereEntity });
 
     // ========================================
@@ -102,7 +111,7 @@ export function Playground() {
  * objectsRef.current.push({ mesh: cube, entity });
  *
  * // インタラクティブにする
- * Interactive.add(entity, { id: "my-cube" });
+ * entity.addComponent(Interactive, { id: "my-cube" });
  *
  * // GLTFモデルをロード（事前にアセットマニフェストに追加が必要）
  * import { AssetManager } from "@iwsdk/core";
