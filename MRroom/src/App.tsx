@@ -1,130 +1,134 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  AssetManifest,
-  AssetType,
-  SessionMode,
-  World,
-} from "@iwsdk/core";
+import * as THREE from "three";
 import { useXRStore } from "./stores/xrStore";
-import { HitTestSystem } from "./systems/HitTestSystem";
-import { InteractionSystem } from "./systems/InteractionSystem";
-import { PanelSystem } from "./systems/PanelSystem";
-import { Playground } from "./components/Playground";
-
-// アセットマニフェスト定義
-const assets: AssetManifest = {
-  // 必要に応じてアセットを追加
-  // chimeSound: {
-  //   url: "/audio/chime.mp3",
-  //   type: AssetType.Audio,
-  //   priority: "background",
-  // },
-};
+import { HitTestManager } from "./core/HitTestManager";
+import { InteractionManager } from "./core/InteractionManager";
 
 function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { setWorld, world, error } = useXRStore();
+  const { setRenderer, setScene, setCamera, error, reticleVisible } = useXRStore();
   const [isInitializing, setIsInitializing] = useState(false);
-  const initOnceRef = useRef(false);
+  const [xrSupported, setXrSupported] = useState(false);
+
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const hitTestManagerRef = useRef<HitTestManager | null>(null);
+  const interactionManagerRef = useRef<InteractionManager | null>(null);
 
   useEffect(() => {
-    // 既にworldが存在するか、初期化中の場合はスキップ
-    if (world || initOnceRef.current || !containerRef.current) return;
+    if (!containerRef.current) return;
 
-    initOnceRef.current = true;
+    // WebXRサポート確認
+    if (navigator.xr) {
+      navigator.xr.isSessionSupported("immersive-ar").then((supported) => {
+        setXrSupported(supported);
+      });
+    }
+
     setIsInitializing(true);
 
-    console.log("Initializing IWSDK World...");
+    // シーンのセットアップ
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
+    setScene(scene);
 
-    // IWSDK Worldの作成
-    World.create(containerRef.current, {
-      assets,
-      xr: {
-        sessionMode: SessionMode.ImmersiveVR,
-        offer: "always",
-        // XR機能の設定
-        features: {
-          handTracking: { required: true },
-          layers: { required: true },
-          // ヒットテスト機能を有効化
-          "hit-test": { required: false, optional: true },
-        },
-      },
-      features: {
-        locomotion: { useWorker: true },
-        grabbing: true,
-        physics: true,
-        sceneUnderstanding: true, // ヒットテストに必要
-      },
-      // Metaspatialのレベルファイル（後で追加）
-      // level: "/glxf/Composition.glxf",
-    })
-      .then((newWorld) => {
-        console.log("World created successfully");
+    // カメラのセットアップ
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(0, 1.6, 3);
+    cameraRef.current = camera;
+    setCamera(camera);
 
-        // カメラの初期位置設定
-        const { camera } = newWorld;
-        camera.position.set(0, 1.6, 3);
-        camera.lookAt(0, 1, 0);
+    // レンダラーのセットアップ
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true
+    });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    containerRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
+    setRenderer(renderer);
 
-        // システムの登録(問題のあるシステムを特定するため1つずつ)
-        try {
-          console.log("Registering PanelSystem...");
-          newWorld.registerSystem(PanelSystem);
-          console.log("PanelSystem registered successfully");
-        } catch (err) {
-          console.error("Failed to register PanelSystem:", err);
-        }
+    // ライトの追加
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
 
-        try {
-          console.log("Registering HitTestSystem...");
-          newWorld.registerSystem(HitTestSystem);
-          console.log("HitTestSystem registered successfully");
-        } catch (err) {
-          console.error("Failed to register HitTestSystem:", err);
-        }
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(0, 10, 10);
+    scene.add(directionalLight);
 
-        try {
-          console.log("Registering InteractionSystem...");
-          newWorld.registerSystem(InteractionSystem);
-          console.log("InteractionSystem registered successfully");
-        } catch (err: any) {
-          console.error("Failed to register InteractionSystem:", err);
-          console.error("InteractionSystem error details:", {
-            message: err?.message,
-            stack: err?.stack,
-            name: err?.name,
-          });
-        }
+    // ヒットテストマネージャーの初期化
+    hitTestManagerRef.current = new HitTestManager(renderer, scene);
 
-        // Zustandストアに保存
-        setWorld(newWorld);
-        setIsInitializing(false);
+    // インタラクションマネージャーの初期化
+    interactionManagerRef.current = new InteractionManager(renderer, scene, camera);
 
-        console.log("Systems registered");
-      })
-      .catch((err) => {
-        console.error("Failed to create World:", err);
-        console.error("Error details:", {
-          message: err?.message,
-          stack: err?.stack,
-          name: err?.name,
-          fullError: JSON.stringify(err, Object.getOwnPropertyNames(err))
-        });
-        useXRStore.getState().setError(err?.message || "Unknown error occurred");
-        setIsInitializing(false);
-        initOnceRef.current = false; // 再試行を可能にする
-      });
+    // アニメーションループ
+    renderer.setAnimationLoop((_time, frame) => {
+      if (hitTestManagerRef.current) {
+        hitTestManagerRef.current.update(frame);
+      }
+      if (interactionManagerRef.current) {
+        interactionManagerRef.current.update();
+      }
+      renderer.render(scene, camera);
+    });
+
+    // リサイズ処理
+    const handleResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener("resize", handleResize);
+
+    setIsInitializing(false);
 
     // クリーンアップ
     return () => {
-      if (world) {
-        console.log("Cleaning up World...");
-        // XRセッションが有効な場合は終了
-        world.exitXR().catch(console.error);
+      window.removeEventListener("resize", handleResize);
+      renderer.setAnimationLoop(null);
+      if (containerRef.current?.contains(renderer.domElement)) {
+        containerRef.current.removeChild(renderer.domElement);
       }
+      renderer.dispose();
+      hitTestManagerRef.current?.dispose();
+      interactionManagerRef.current?.dispose();
     };
-  }, [world, setWorld]);
+  }, [setRenderer, setScene, setCamera]);
+
+  // XRセッション開始
+  const handleEnterAR = async () => {
+    if (!rendererRef.current || !navigator.xr) return;
+
+    try {
+      const session = await navigator.xr.requestSession("immersive-ar", {
+        requiredFeatures: ["hit-test"],
+        optionalFeatures: ["local-floor", "bounded-floor"],
+      });
+
+      await rendererRef.current.xr.setSession(session);
+
+      // セッション開始時にヒットテストを初期化
+      if (hitTestManagerRef.current) {
+        hitTestManagerRef.current.onSessionStart(session);
+      }
+
+      session.addEventListener("end", () => {
+        console.log("XR session ended");
+      });
+    } catch (err) {
+      console.error("Failed to start AR session:", err);
+      useXRStore.getState().setError("AR session failed to start");
+    }
+  };
 
   // エラー表示
   if (error) {
@@ -190,7 +194,7 @@ function App() {
 
   return (
     <>
-      {/* IWSDKのシーンコンテナ */}
+      {/* Three.jsのシーンコンテナ */}
       <div
         ref={containerRef}
         id="scene-container"
@@ -203,30 +207,56 @@ function App() {
         }}
       />
 
-      {/* Playgroundコンポーネント（ライブコーディング用） */}
-      <Playground />
+      {/* AR開始ボタン */}
+      {xrSupported && !rendererRef.current?.xr.isPresenting && (
+        <button
+          onClick={handleEnterAR}
+          style={{
+            position: "absolute",
+            bottom: "40px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            padding: "15px 30px",
+            background: "#0066ff",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "18px",
+            fontWeight: "bold",
+            cursor: "pointer",
+            zIndex: 999,
+          }}
+        >
+          Enter AR
+        </button>
+      )}
 
-      {/* デバッグ情報（開発時のみ表示） */}
-      {import.meta.env.DEV && world && (
+      {/* デバッグ情報 */}
+      {import.meta.env.DEV && (
         <div
           style={{
             position: "absolute",
             top: "10px",
             left: "10px",
-            background: "rgba(0, 0, 0, 0.7)",
+            background: "rgba(0, 0, 0, 0.8)",
             color: "#0f0",
-            padding: "10px",
+            padding: "15px",
             fontFamily: "monospace",
-            fontSize: "12px",
+            fontSize: "14px",
             borderRadius: "4px",
             zIndex: 999,
             pointerEvents: "none",
+            maxWidth: "300px",
           }}
         >
-          <div>MR Room - Development Mode</div>
-          <div>World: {world ? "✓" : "✗"}</div>
-          <div>
-            XR State: {useXRStore.getState().xrState}
+          <div>MR Room - Debug Info</div>
+          <div>WebXR: {xrSupported ? "✓" : "✗"}</div>
+          <div>Session: {rendererRef.current?.xr.isPresenting ? "Active" : "Inactive"}</div>
+          <div>Reticle: {reticleVisible ? "🎯 Visible" : "👻 Hidden"}</div>
+          <div style={{ marginTop: "5px", fontSize: "12px", color: "#888" }}>
+            {reticleVisible
+              ? "Surface detected - Tap to place!"
+              : "Point at floor/wall to detect surface"}
           </div>
         </div>
       )}

@@ -1,26 +1,22 @@
-# MR Room - Immersive Web Application
+# MR Room - Simple Mixed Reality Application
 
-A production-ready Mixed Reality application built with **IWSDK (Immersive Web SDK)**, **React**, **Vite**, and **Zustand** for state management. This project demonstrates best practices for building WebXR applications with Hot Module Replacement (HMR) support.
+A simple Mixed Reality application built with **React**, **Vite**, and **Three.js** using the WebXR API. This project demonstrates basic AR functionality with object placement and interaction.
 
 ## Features
 
-- ✅ **Hand Tracking** - Native hand tracking support for Quest devices
-- ✅ **Hit Test** - AR surface detection for placing objects in real world
-- ✅ **Physics Simulation** - Havok-powered physics engine
-- ✅ **Grabbable Objects** - Interact with 3D objects using hands or controllers
-- ✅ **Spatial UI** - UIKitML-based spatial user interface
-- ✅ **State Management** - Zustand for reliable XR session state management
-- ✅ **Hot Module Replacement** - Fast development with Vite HMR
-- ✅ **Scene Understanding** - Environment mesh and surface detection
-- ✅ **WebXR Emulation** - Test VR experiences in desktop browser using IWER
+- ✅ **WebXR AR Support** - Immersive AR sessions using WebXR API
+- ✅ **Hit Test** - Real-world surface detection for object placement
+- ✅ **Object Placement** - Tap to place 3D objects (cubes, spheres, cylinders)
+- ✅ **Object Interaction** - Click/tap to select and highlight objects
+- ✅ **State Management** - Zustand for XR session state
+- ✅ **Fast Development** - Vite HMR support
 
 ## Tech Stack
 
-- **IWSDK Core** - Immersive Web SDK v0.1.0
 - **React** - v18.3 with TypeScript
-- **Vite** - v7.1 for blazing fast builds
+- **Vite** - v7.1 for fast builds
+- **Three.js** - v0.170 for 3D rendering
 - **Zustand** - v5.0 for state management
-- **Three.js** (super-three) - v0.177 for 3D rendering
 - **TypeScript** - v5.5 for type safety
 
 ## Project Structure
@@ -28,27 +24,17 @@ A production-ready Mixed Reality application built with **IWSDK (Immersive Web S
 ```
 MRroom/
 ├── src/
-│   ├── components/          # React components
+│   ├── core/
+│   │   ├── HitTestManager.ts      # Hit test & object placement
+│   │   └── InteractionManager.ts  # Object interaction & selection
 │   ├── stores/
-│   │   └── xrStore.ts      # Zustand XR state store
-│   ├── systems/
-│   │   ├── HitTestSystem.ts       # Hit testing implementation
-│   │   ├── InteractionSystem.ts   # Object interaction system
-│   │   └── PanelSystem.ts         # UI panel management
-│   ├── App.tsx             # Main React component
-│   ├── main.tsx            # Application entry point
-│   └── index.css           # Global styles
-├── ui/
-│   └── control-panel.uikitml      # Spatial UI definition
-├── public/
-│   ├── textures/           # Texture assets
-│   ├── audio/              # Audio files
-│   ├── models/             # 3D models
-│   └── glxf/               # Generated GLXF files (auto-generated)
-├── metaspatial/            # Meta Spatial SDK project files
-├── vite.config.ts          # Vite configuration
-├── tsconfig.json           # TypeScript configuration
-└── package.json            # Dependencies
+│   │   └── xrStore.ts             # Zustand XR state store
+│   ├── App.tsx                    # Main React component
+│   ├── main.tsx                   # Application entry point
+│   └── vite-env.d.ts              # Vite type definitions
+├── vite.config.ts                 # Vite configuration
+├── tsconfig.json                  # TypeScript configuration
+└── package.json                   # Dependencies
 ```
 
 ## Getting Started
@@ -58,19 +44,7 @@ MRroom/
 - **Node.js** >= 20.19.0
 - **npm** or **yarn**
 - **HTTPS** (automatically handled by `vite-plugin-mkcert`)
-
-### Quick Start for Live Coding
-
-このプロジェクトは**XRセッションを維持したまま**ライブコーディングできるように設計されています。
-
-詳細は **[LIVE_CODING.md](./LIVE_CODING.md)** を参照してください。
-
-```bash
-npm run dev
-# → XRモードに入る
-# → src/components/Playground.tsx を編集
-# → 保存 → 即座に反映（セッション継続）✅
-```
+- **WebXR-compatible device** (Meta Quest, ARCore devices, etc.)
 
 ### Installation
 
@@ -97,16 +71,24 @@ npm run build
 npm run preview
 ```
 
+## How to Use
+
+1. **Open the app** on a WebXR-compatible device (Meta Quest, ARCore phone, etc.)
+2. **Click "Enter AR"** to start the AR session
+3. **Point your device** at a surface (floor, wall, table)
+4. **Wait for the green reticle** (ring) to appear on the detected surface
+5. **Tap the screen** or **press the trigger** to place an object
+6. **Tap objects** to select/deselect them (they will highlight)
+
+### Object Types
+
+Objects are placed in rotation:
+1. **Red Cube** (first tap)
+2. **Green Sphere** (second tap)
+3. **Blue Cylinder** (third tap)
+4. Repeats...
+
 ## Development
-
-### Hot Module Replacement (HMR)
-
-This project is optimized for HMR to maintain XR session state when possible:
-
-- **UI changes** - Instant updates without XR session restart
-- **Logic changes** - Fast refresh for event handlers
-- **State management** - Zustand preserves state across HMR
-- **Core changes** - XR session will restart (unavoidable with WebXR API)
 
 ### State Management with Zustand
 
@@ -116,116 +98,106 @@ The `xrStore.ts` handles all XR-related state:
 import { useXRStore } from "./stores/xrStore";
 
 // In React components
-const { world, xrState, enterXR, exitXR } = useXRStore();
+const { renderer, scene, camera, reticleVisible } = useXRStore();
 
-// In IWSDK systems
-useXRStore.getState().selectObject(id);
+// Access from managers
+useXRStore.getState().setReticleVisible(true);
 ```
 
-### Adding New Systems
+### Core Managers
 
-1. Create a new system file in `src/systems/`
-2. Define components and queries using IWSDK ECS API
-3. Register the system in `App.tsx`:
+#### HitTestManager
+
+Handles WebXR hit testing and object placement:
 
 ```typescript
-newWorld
-  .registerSystem(PanelSystem)
-  .registerSystem(HitTestSystem)
-  .registerSystem(YourNewSystem);  // Add here
+const hitTestManager = new HitTestManager(renderer, scene);
+hitTestManager.onSessionStart(session); // Initialize on XR session start
+hitTestManager.update(frame); // Update each frame
 ```
 
-### Working with Hit Test
+#### InteractionManager
 
-The `HitTestSystem` provides real-time surface detection:
+Manages object selection and highlighting:
 
 ```typescript
-// Access hit test results from store
-const { hitTestResults, reticleVisible } = useXRStore();
-
-// Get last hit position in a system
-const hitTestSystem = world.getSystem(HitTestSystem);
-const position = hitTestSystem.getLastHitPosition();
+const interactionManager = new InteractionManager(renderer, scene, camera);
+interactionManager.update(); // Update each frame
 ```
 
-### Creating Interactive Objects
+### WebXR Session Flow
 
-Use the `Interactive` component to make objects interactable:
-
-```typescript
-import { Interactive } from "./systems/InteractionSystem";
-
-// Add to an entity
-Interactive.add(entity, {
-  id: "my-object",
-  highlightColor: 0x00ff00,
-});
-```
+1. User clicks "Enter AR" button
+2. Request `immersive-ar` session with `hit-test` feature
+3. Initialize hit test source when session starts
+4. Each frame:
+   - Perform hit test
+   - Update reticle position
+   - Check for user input (select event)
+   - Place objects on tap
+   - Handle object interactions
 
 ## Configuration
 
-### Vite Plugins
-
-- **injectIWER** - WebXR emulation for desktop browsers
-- **discoverComponents** - Auto-discover IWSDK components
-- **generateGLXF** - Compile Meta Spatial files
-- **compileUIKit** - Build UIKitML files
-- **optimizeGLTF** - Optimize 3D models
-- **react** - React Fast Refresh
-
-### XR Features
+### WebXR Features
 
 Configured in `App.tsx`:
 
 ```typescript
-xr: {
-  sessionMode: SessionMode.ImmersiveVR,
-  features: {
-    handTracking: { required: true },
-    layers: { required: true },
-    'hit-test': { required: false, optional: true },
-  },
-},
-features: {
-  locomotion: { useWorker: true },
-  grabbing: true,
-  physics: true,
-  sceneUnderstanding: true,
-}
+const session = await navigator.xr.requestSession("immersive-ar", {
+  requiredFeatures: ["hit-test"],
+  optionalFeatures: ["dom-overlay"],
+});
+```
+
+### Camera Settings
+
+```typescript
+const camera = new THREE.PerspectiveCamera(
+  75,                                    // FOV
+  window.innerWidth / window.innerHeight, // Aspect ratio
+  0.1,                                   // Near plane
+  1000                                   // Far plane
+);
+camera.position.set(0, 1.6, 3); // Initial position
 ```
 
 ## Troubleshooting
 
-### XR Session Not Starting
+### AR Session Not Starting
 
-- Ensure you're using HTTPS (handled automatically by mkcert)
+- Ensure you're using **HTTPS** (handled automatically by mkcert)
 - Check browser console for WebXR API errors
-- Verify hand tracking is supported on your device
+- Verify your device supports WebXR (check `navigator.xr`)
+- Try reloading the page
 
-### HMR Not Working
+### Hit Test Not Working
 
-- Check that `import.meta.hot` is available
-- Ensure you're in development mode (`npm run dev`)
-- Try restarting the dev server
+- Make sure you're pointing at a detectable surface
+- Some surfaces (reflective, transparent) may not be detected
+- Try pointing at the floor or a solid wall
+- Check console for hit test errors
 
-### Hit Test Not Detecting Surfaces
+### Reticle Not Appearing
 
-- Verify `sceneUnderstanding: true` is enabled
-- Check that `'hit-test'` feature is requested
-- Ensure you're in an XR session (not browser mode)
+- Ensure the XR session is active
+- Check that hit-test feature was granted
+- Point at different surfaces
+- Check console for errors
 
 ## Browser Support
 
-- **Meta Quest 2/3/Pro** - Full support
-- **Desktop (with IWER)** - Emulation mode for development
-- **Other WebXR devices** - Should work but untested
+- **Meta Quest 2/3/Pro** - Full support via Meta Browser
+- **ARCore devices** - Full support via Chrome
+- **ARKit devices (iOS)** - WebXR Viewer app required
+- **Desktop** - No AR support (will show "Enter AR" button but won't work)
 
 ## Performance Tips
 
-- Use `useWorker: true` for locomotion
-- Optimize GLTF models using the built-in plugin
-- Limit polygon count for grabbable objects
-- Use LOD (Level of Detail) for complex scenes
+- Limit the number of placed objects (each object adds to render time)
+- Use simple geometries for better performance
+- Optimize materials (avoid complex shaders)
+- Keep polygon count low
 
 ## License
 
@@ -237,11 +209,11 @@ Contributions are welcome! Please follow the existing code structure and TypeScr
 
 ## Resources
 
-- [IWSDK Documentation](https://immersive-web.github.io/webxr/)
-- [Zustand Documentation](https://docs.pmnd.rs/zustand/)
 - [WebXR API](https://developer.mozilla.org/en-US/docs/Web/API/WebXR_Device_API)
+- [Three.js Documentation](https://threejs.org/docs/)
+- [Zustand Documentation](https://docs.pmnd.rs/zustand/)
 - [Meta Quest Development](https://developer.oculus.com/)
 
 ---
 
-Built with ❤️ using IWSDK and React
+Built with Three.js and React

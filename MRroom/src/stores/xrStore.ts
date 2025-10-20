@@ -1,5 +1,5 @@
-import type { World } from "@iwsdk/core";
 import { create } from "zustand";
+import * as THREE from "three";
 
 // XRセッション状態の型定義
 export enum XRState {
@@ -11,7 +11,9 @@ export enum XRState {
 // ストアの型定義
 interface XRStore {
   // 状態
-  world: World | null;
+  renderer: THREE.WebGLRenderer | null;
+  scene: THREE.Scene | null;
+  camera: THREE.PerspectiveCamera | null;
   xrState: XRState;
   isInitialized: boolean;
   isLoading: boolean;
@@ -26,7 +28,9 @@ interface XRStore {
   hoveredObjectId: string | null;
 
   // アクション
-  setWorld: (world: World) => void;
+  setRenderer: (renderer: THREE.WebGLRenderer) => void;
+  setScene: (scene: THREE.Scene) => void;
+  setCamera: (camera: THREE.PerspectiveCamera) => void;
   setXRState: (state: XRState) => void;
   setInitialized: (initialized: boolean) => void;
   setLoading: (loading: boolean) => void;
@@ -40,17 +44,15 @@ interface XRStore {
   selectObject: (id: string | null) => void;
   hoverObject: (id: string | null) => void;
 
-  // XR制御
-  enterXR: () => Promise<void>;
-  exitXR: () => Promise<void>;
-
   // リセット
   reset: () => void;
 }
 
 // 初期状態
 const initialState = {
-  world: null,
+  renderer: null,
+  scene: null,
+  camera: null,
   xrState: XRState.NonImmersive,
   isInitialized: false,
   isLoading: false,
@@ -62,13 +64,19 @@ const initialState = {
 };
 
 // Zustand store作成
-export const useXRStore = create<XRStore>((set, get) => ({
+export const useXRStore = create<XRStore>((set) => ({
   ...initialState,
 
-  // World設定
-  setWorld: (world) => {
-    set({ world, isInitialized: true });
+  // Renderer設定
+  setRenderer: (renderer) => {
+    set({ renderer, isInitialized: true });
   },
+
+  // Scene設定
+  setScene: (scene) => set({ scene }),
+
+  // Camera設定
+  setCamera: (camera) => set({ camera }),
 
   // XR状態設定
   setXRState: (xrState) => set({ xrState }),
@@ -94,59 +102,6 @@ export const useXRStore = create<XRStore>((set, get) => ({
   // オブジェクトホバー
   hoverObject: (hoveredObjectId) => set({ hoveredObjectId }),
 
-  // XRに入る
-  enterXR: async () => {
-    const { world } = get();
-    if (!world) {
-      set({ error: "World not initialized" });
-      return;
-    }
-
-    try {
-      set({ isLoading: true, error: null });
-      await world.launchXR();
-      set({ xrState: XRState.ImmersiveVR, isLoading: false });
-    } catch (error) {
-      console.error("Failed to enter XR:", error);
-      set({
-        error: error instanceof Error ? error.message : "Failed to enter XR",
-        isLoading: false,
-      });
-    }
-  },
-
-  // XRから出る
-  exitXR: async () => {
-    const { world } = get();
-    if (!world) return;
-
-    try {
-      set({ isLoading: true, error: null });
-      await world.exitXR();
-      set({ xrState: XRState.NonImmersive, isLoading: false });
-    } catch (error) {
-      console.error("Failed to exit XR:", error);
-      set({
-        error: error instanceof Error ? error.message : "Failed to exit XR",
-        isLoading: false,
-      });
-    }
-  },
-
   // リセット
   reset: () => set(initialState),
 }));
-
-// HMR対応
-if (import.meta.hot) {
-  import.meta.hot.accept();
-
-  // HMR時にストアの状態を保持
-  import.meta.hot.dispose(() => {
-    const state = useXRStore.getState();
-    // クリーンアップ処理
-    if (state.world && state.xrState !== XRState.NonImmersive) {
-      state.world.exitXR().catch(console.error);
-    }
-  });
-}
