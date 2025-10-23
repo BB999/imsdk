@@ -11,10 +11,15 @@ export class HitTestManager {
   private scene: THREE.Scene;
   private reticleMesh: THREE.Mesh | null = null;
   private hitTestSource: XRHitTestSource | null = null;
+  private rightHandHitTestSource: XRHitTestSource | null = null;
+  private rightHandInputSource: XRInputSource | null = null;
   private referenceSpace: XRReferenceSpace | null = null;
   private lastHitPosition: THREE.Vector3 = new THREE.Vector3();
   private placedObjects: THREE.Object3D[] = [];
   private objectCounter = 0;
+  private session: XRSession | null = null;
+  private inputSourcesChangeListener: ((event: XRInputSourcesChangeEvent) => void) | null = null;
+  private sessionEndListener: (() => void) | null = null;
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene) {
     this.renderer = renderer;
@@ -48,6 +53,7 @@ export class HitTestManager {
    */
   async onSessionStart(session: XRSession) {
     try {
+      this.session = session;
       // reference spaceを取得（利用可能なものを順番に試す）
       try {
         this.referenceSpace = await session.requestReferenceSpace("local-floor");
@@ -70,6 +76,41 @@ export class HitTestManager {
         throw new Error("Hit test not supported");
       }
 
+      // 右手入力ソースの監視とヒットテスト初期化
+      const trySetupRightHand = (inputSource: XRInputSource) => {
+        if (inputSource.handedness === "right" && inputSource.targetRaySpace) {
+          this.setupRightHandHitTest(session, inputSource);
+        }
+      };
+
+      session.inputSources.forEach((source) => trySetupRightHand(source));
+
+      const handleInputSourcesChange = (event: XRInputSourcesChangeEvent) => {
+        event.added.forEach(trySetupRightHand);
+
+        event.removed.forEach((inputSource: XRInputSource) => {
+          if (inputSource === this.rightHandInputSource) {
+            this.clearRightHandHitTest();
+          }
+        });
+      };
+
+      session.addEventListener("inputsourceschange", handleInputSourcesChange);
+      this.inputSourcesChangeListener = handleInputSourcesChange;
+
+      const handleSessionEnd = () => {
+        this.clearRightHandHitTest();
+        if (this.session && this.inputSourcesChangeListener) {
+          this.session.removeEventListener("inputsourceschange", this.inputSourcesChangeListener);
+        }
+        this.session = null;
+        this.sessionEndListener = null;
+        this.inputSourcesChangeListener = null;
+      };
+
+      session.addEventListener("end", handleSessionEnd);
+      this.sessionEndListener = handleSessionEnd;
+
       console.log("✅ Hit test source initialized");
       useXRStore.getState().setError(null);
     } catch (error) {
@@ -82,12 +123,20 @@ export class HitTestManager {
    * 毎フレーム実行される更新処理
    */
   update(frame?: XRFrame) {
-    if (!frame || !this.hitTestSource || !this.reticleMesh || !this.referenceSpace) {
+    if (!frame || !this.reticleMesh || !this.referenceSpace) {
       return;
     }
 
     try {
-      const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+      let hitTestResults: XRHitTestResult[] = [];
+
+      if (this.rightHandHitTestSource) {
+        hitTestResults = frame.getHitTestResults(this.rightHandHitTestSource);
+      }
+
+      if (hitTestResults.length === 0 && this.hitTestSource) {
+        hitTestResults = frame.getHitTestResults(this.hitTestSource);
+      }
 
       if (hitTestResults.length > 0) {
         const hit = hitTestResults[0];
@@ -217,10 +266,24 @@ export class HitTestManager {
    * クリーンアップ
    */
   dispose() {
+    this.clearRightHandHitTest();
+
     if (this.hitTestSource) {
       this.hitTestSource.cancel();
       this.hitTestSource = null;
     }
+
+    if (this.session && this.inputSourcesChangeListener) {
+      this.session.removeEventListener("inputsourceschange", this.inputSourcesChangeListener);
+    }
+
+    if (this.session && this.sessionEndListener) {
+      this.session.removeEventListener("end", this.sessionEndListener);
+    }
+
+    this.session = null;
+    this.inputSourcesChangeListener = null;
+    this.sessionEndListener = null;
 
     if (this.reticleMesh) {
       this.scene.remove(this.reticleMesh);
@@ -240,5 +303,42 @@ export class HitTestManager {
       }
     });
     this.placedObjects = [];
+  }
+
+  /**
+   * 右手ヒットテストのセットアップ
+   */
+  private async setupRightHandHitTest(session: XRSession, inputSource: XRInputSource) {
+    try {
+      if (!inputSource.targetRaySpace) return;
+
+      this.clearRightHandHitTest();
+
+      if (!session.requestHitTestSource) {
+        console.warn("⚠️ requestHitTestSource is unavailable on this session");
+        return;
+      }
+
+      const source = await session.requestHitTestSource({
+        space: inputSource.targetRaySpace,
+      });
+
+      this.rightHandHitTestSource = source ?? null;
+      this.rightHandInputSource = inputSource;
+      console.log("✅ Right-hand hit test source initialized");
+    } catch (error) {
+      console.warn("⚠️ Failed to setup right-hand hit test:", error);
+    }
+  }
+
+  /**
+   * 右手ヒットテストの破棄
+   */
+  private clearRightHandHitTest() {
+    if (this.rightHandHitTestSource) {
+      this.rightHandHitTestSource.cancel();
+      this.rightHandHitTestSource = null;
+    }
+    this.rightHandInputSource = null;
   }
 }
